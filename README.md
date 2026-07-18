@@ -1,3 +1,6 @@
+<img width="1262" height="780" alt="image" src="https://github.com/user-attachments/assets/4f8566dc-6208-4cdf-b3e6-24611305c08e" />
+
+
 # Last Mile — Delivery ETA Prediction
 
 Predicting food delivery time from real-world, messy data — with an emphasis on explaining *why* the model predicts what it does, not just reporting an accuracy number.
