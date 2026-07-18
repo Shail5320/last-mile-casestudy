@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Last Mile — Predicting Delivery ETA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0f1214;
+    --panel: #171b1e;
+    --panel-raised: #1d2226;
+    --line: #2a3033;
+    --amber: #ffb020;
+    --amber-dim: #7a5c1c;
+    --teal: #33c6a0;
+    --red: #e5484d;
+    --text: #edefef;
+    --muted: #8a9199;
+    --muted-dim: #5c6469;
+    --paper: #e9e4d8;
+    --paper-ink: #14140f;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    line-height: 1.6;
+  }
+  h1, h2, h3, .display {
+    font-family: 'Space Grotesk', sans-serif;
+    letter-spacing: -0.01em;
+  }
+  .mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+  a { color: var(--teal); }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 28px;
+  }
+
+  /* ---------- NAV ---------- */
+  nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(15,18,20,0.88);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  nav .wrap { display:flex; align-items:center; justify-content:space-between; padding: 16px 28px; }
+  .brand { display:flex; align-items:center; gap:10px; font-family:'Space Grotesk'; font-weight:600; font-size: 15px; }
+  .brand .dot { width:8px; height:8px; border-radius:50%; background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+  nav .links { display:flex; gap: 22px; font-size: 13px; color: var(--muted); }
+  nav .links a { color: var(--muted); text-decoration:none; }
+  nav .links a:hover { color: var(--text); }
+
+  /* ---------- HERO ---------- */
+  header.hero { padding: 64px 0 40px; }
+  .eyebrow {
+    font-family:'JetBrains Mono'; font-size: 12px; color: var(--amber);
+    text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 14px;
+  }
+  h1.title { font-size: 44px; font-weight: 700; margin: 0 0 18px; max-width: 620px; }
+  .subhead { color: var(--muted); font-size: 16px; max-width: 520px; margin-bottom: 8px;}
+
+  .hero-grid {
+    display: grid; grid-template-columns: 1.1fr 1fr; gap: 36px; align-items: start;
+    margin-top: 40px;
+  }
+  @media (max-width: 860px) { .hero-grid { grid-template-columns: 1fr; } }
+
+  /* ---------- ROUTE PANEL ---------- */
+  .route-panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .route-panel .label-row { display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;}
+  .route-panel .label-row .tag { font-family:'JetBrains Mono'; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em;}
+  .status-pill {
+    font-family: 'JetBrains Mono'; font-size: 11px; padding: 4px 10px; border-radius: 20px;
+    background: rgba(51,198,160,0.12); color: var(--teal); border: 1px solid rgba(51,198,160,0.3);
+  }
+  svg#routeSvg { width:100%; height: 200px; display:block; }
+  .route-path { fill:none; stroke: var(--line); stroke-width:3; stroke-dasharray: 2 10; stroke-linecap: round; }
+  .route-path-active { fill:none; stroke: var(--amber); stroke-width:3; stroke-linecap: round; opacity:0.9;}
+  .node { fill: var(--panel-raised); stroke: var(--muted-dim); stroke-width: 1.5; }
+  .node-label { fill: var(--muted); font-family:'JetBrains Mono'; font-size: 10px; }
+  #courier {
+    r: 6; fill: var(--amber); filter: drop-shadow(0 0 6px rgba(255,176,32,0.9));
+  }
+
+  .eta-readout { margin-top: 14px; display:flex; align-items:baseline; gap: 10px;}
+  .eta-readout .big { font-family:'JetBrains Mono'; font-size: 40px; font-weight:700; color: var(--amber); }
+  .eta-readout .unit { font-family:'JetBrains Mono'; font-size: 13px; color: var(--muted); }
+
+  /* ---------- WAYBILL (signature element) ---------- */
+  .waybill {
+    background: var(--paper);
+    color: var(--paper-ink);
+    border-radius: 4px;
+    padding: 22px 22px 18px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.35);
+    position: relative;
+  }
+  .waybill::before {
+    content: "";
+    position: absolute; top:0; left:0; right:0; height: 6px;
+    background-image: repeating-linear-gradient(90deg, transparent, transparent 6px, var(--bg) 6px, var(--bg) 12px);
+  }
+  .waybill h3 { font-family:'JetBrains Mono'; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; margin: 6px 0 2px;}
+  .waybill .sub { color: #5c5842; font-size: 11px; margin-bottom: 14px;}
+  .waybill .divider { border-top: 1px dashed #b8b199; margin: 12px 0; }
+  .wb-row { display:flex; justify-content:space-between; padding: 3px 0; }
+  .wb-row .k { color:#4a4736; }
+  .wb-row .v { font-weight: 600; }
+  .wb-row .v.pos::before { content: "+"; }
+  .wb-total { display:flex; justify-content:space-between; margin-top: 10px; padding-top:10px; border-top: 1px solid #14140f; font-size: 15px; font-weight: 700;}
+
+  /* ---------- CONTROLS ---------- */
+  .controls {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px;
+    margin-top: 20px;
+  }
+  .controls .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap: 16px 20px; }
+  @media (max-width: 560px) { .controls .grid2 { grid-template-columns: 1fr; } }
+  .field { margin-bottom: 4px; }
+  .field label {
+    display:block; font-family:'JetBrains Mono'; font-size: 11px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px;
+  }
+  .field .val { color: var(--amber); }
+  select, input[type=range] { width: 100%; }
+  select {
+    background: var(--panel-raised); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 8px 10px; font-family:'Inter'; font-size: 13px;
+  }
+  input[type=range] {
+    -webkit-appearance: none; height: 4px; background: var(--line); border-radius: 4px; outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height:16px; border-radius:50%;
+    background: var(--amber); cursor:pointer; border: 2px solid var(--bg);
+  }
+  .toggle-row { display:flex; gap:10px; margin-top: 6px;}
+  .toggle-btn {
+    flex:1; text-align:center; padding: 8px; border-radius: 6px; border: 1px solid var(--line);
+    background: var(--panel-raised); color: var(--muted); font-family:'JetBrains Mono'; font-size: 12px;
+    cursor:pointer; transition: all 0.15s;
+  }
+  .toggle-btn.active { background: rgba(255,176,32,0.12); border-color: var(--amber); color: var(--amber); }
+
+  /* ---------- SECTIONS ---------- */
+  section { padding: 70px 0; border-top: 1px solid var(--line); }
+  .section-head { display:flex; align-items:baseline; gap: 14px; margin-bottom: 28px; }
+  .section-num { font-family:'JetBrains Mono'; color: var(--muted-dim); font-size: 13px; }
+  h2.section-title { font-size: 26px; margin: 0; }
+  .lead { color: var(--muted); max-width: 640px; font-size: 15px; margin-bottom: 30px;}
+
+  .stat-strip { display:flex; gap: 0; border: 1px solid var(--line); border-radius: 10px; overflow:hidden; margin-bottom: 36px;}
+  .stat { flex:1; padding: 20px; border-right: 1px solid var(--line); }
+  .stat:last-child { border-right:none; }
+  .stat .num { font-family:'JetBrains Mono'; font-size: 26px; color: var(--amber); font-weight:600;}
+  .stat .lbl { font-size: 12px; color: var(--muted); margin-top:4px;}
+
+  .insight-grid { display:grid; grid-template-columns: repeat(4,1fr); gap: 14px; }
+  @media (max-width: 860px) { .insight-grid { grid-template-columns: repeat(2,1fr); } }
+  .insight-card {
+    background: var(--panel); border:1px solid var(--line); border-radius: 10px; padding: 18px;
+  }
+  .insight-card .strength { font-family:'JetBrains Mono'; font-size: 11px; text-transform:uppercase; letter-spacing:0.06em;}
+  .insight-card .strength.weak { color: var(--muted); }
+  .insight-card .strength.mod { color: var(--teal); }
+  .insight-card .strength.strong { color: var(--amber); }
+  .insight-card h4 { margin: 8px 0 6px; font-size: 15px; }
+  .insight-card p { font-size: 13px; color: var(--muted); margin:0; }
+  .bar-track { height:5px; background: var(--line); border-radius:4px; margin-top:12px; overflow:hidden;}
+  .bar-fill { height:100%; border-radius:4px; }
+
+  .equation-box {
+    background: var(--panel-raised); border:1px solid var(--line); border-radius: 10px;
+    padding: 22px; font-family:'JetBrains Mono'; font-size: 13px; line-height: 2; overflow-x:auto;
+    margin-bottom: 28px; white-space: nowrap;
+  }
+  .equation-box .term { color: var(--muted); }
+  .equation-box .term.active { color: var(--amber); }
+  .equation-box .op { color: var(--muted-dim); margin: 0 6px; }
+
+  table.cmp { width:100%; border-collapse: collapse; font-size: 14px; }
+  table.cmp th, table.cmp td { text-align:left; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  table.cmp th { color: var(--muted); font-family:'JetBrains Mono'; font-size: 11px; text-transform:uppercase; letter-spacing:0.06em; font-weight:500;}
+  table.cmp td.metric { font-family:'JetBrains Mono'; }
+  table.cmp tr.deployed td:first-child { color: var(--amber); }
+  .pill-deployed {
+    display:inline-block; margin-left:8px; font-family:'JetBrains Mono'; font-size: 10px;
+    background: rgba(255,176,32,0.12); color:var(--amber); border:1px solid var(--amber-dim);
+    padding: 2px 8px; border-radius: 20px;
+  }
+
+  .note-card {
+    border-left: 3px solid var(--red); background: rgba(229,72,77,0.06);
+    padding: 16px 18px; border-radius: 0 8px 8px 0; margin-bottom: 16px; font-size: 14px; color: var(--text);
+  }
+  .note-card .tag { color: var(--red); font-family:'JetBrains Mono'; font-size:11px; text-transform:uppercase; letter-spacing:0.06em; display:block; margin-bottom:6px;}
+  .note-card.ok { border-left-color: var(--teal); background: rgba(51,198,160,0.06); }
+  .note-card.ok .tag { color: var(--teal); }
+
+  .reflect { max-width: 680px; font-size: 15px; color: var(--text); }
+  .reflect p { margin-bottom: 16px; }
+
+  footer { padding: 50px 0 70px; border-top: 1px solid var(--line); }
+  .footer-row { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;}
+  .footer-links { display:flex; gap: 18px; font-size: 13px; }
+  .footer-note { color: var(--muted-dim); font-size: 12px; max-width: 500px; }
+
+  ::selection { background: var(--amber); color: var(--bg); }
+  @media (prefers-reduced-motion: reduce) {
+    #courier { animation: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <div class="brand"><span class="dot"></span> LAST&nbsp;MILE / eta-model</div>
+    <div class="links">
+      <a href="#data">Data</a>
+      <a href="#math">The Math</a>
+      <a href="#models">Models</a>
+      <a href="#notes">Honest Notes</a>
+      <a href="#learned">What I Learned</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Dispatch Log · ML Case Study</div>
+    <h1 class="title">How long until it actually arrives?</h1>
+    <p class="subhead">A from-scratch delivery-time predictor — built on 45,000+ real orders, explained term by term, no black box.</p>
+    <p class="subhead" style="color:var(--muted-dim); font-size:13px;">Dataset: Zomato Delivery Operations Analytics (Kaggle) · Model: Linear Regression, live below · Full analysis + Random Forest comparison in the notebook</p>
+
+    <div class="hero-grid">
+      <div class="route-panel">
+        <div class="label-row">
+          <span class="tag">Route Trace</span>
+          <span class="status-pill" id="statusPill">● en route</span>
+        </div>
+        <svg id="routeSvg" viewBox="0 0 480 200">
+          <path class="route-path" d="M 30 160 C 100 40, 180 180, 250 90 S 400 20, 450 60" />
+          <path class="route-path-active" id="routeActive" d="M 30 160 C 100 40, 180 180, 250 90 S 400 20, 450 60" />
+          <circle class="node" cx="30" cy="160" r="6"/>
+          <text class="node-label" x="14" y="180">KITCHEN</text>
+          <circle class="node" cx="450" cy="60" r="6"/>
+          <text class="node-label" x="405" y="45">YOU</text>
+          <circle id="courier" cx="30" cy="160" r="6"/>
+        </svg>
+        <div class="eta-readout">
+          <span class="big" id="etaBig">—</span>
+          <span class="unit">min · predicted</span>
+        </div>
+      </div>
+
+      <div class="waybill">
+        <h3>Fare Estimate — Waybill</h3>
+        <div class="sub">Every line below is a term in the regression equation</div>
+        <div id="wbBase" class="wb-row"><span class="k">base rate (intercept)</span><span class="v">9.94</span></div>
+        <div class="divider"></div>
+        <div id="wbRows"></div>
+        <div class="wb-total"><span>Total ETA</span><span id="wbTotal">—</span></div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="grid2">
+        <div class="field">
+          <label>Distance <span class="val" id="distVal">6.0 km</span></label>
+          <input type="range" id="distance" min="1" max="21" step="0.5" value="6">
+        </div>
+        <div class="field">
+          <label>Rider's simultaneous orders <span class="val" id="mdVal">1</span></label>
+          <input type="range" id="multi" min="0" max="3" step="1" value="1">
+        </div>
+        <div class="field">
+          <label>Traffic</label>
+          <select id="traffic">
+            <option value="0">Low</option>
+            <option value="1" selected>Medium</option>
+            <option value="2">High</option>
+            <option value="3">Jam</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Weather</label>
+          <select id="weather">
+            <option>Sunny</option>
+            <option selected>Cloudy</option>
+            <option>Windy</option>
+            <option>Fog</option>
+            <option>Stormy</option>
+            <option>Sandstorms</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>City type</label>
+          <select id="city">
+            <option selected>Metropolitian</option>
+            <option>Urban</option>
+            <option>Semi-Urban</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Rider vehicle</label>
+          <select id="vehicle">
+            <option>bicycle</option>
+            <option selected>motorcycle</option>
+            <option>scooter</option>
+          </select>
+        </div>
+      </div>
+      <div class="field" style="margin-top:14px;">
+        <label>Festival day?</label>
+        <div class="toggle-row">
+          <div class="toggle-btn active" data-fest="0">No</div>
+          <div class="toggle-btn" data-fest="1">Yes</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="problem">
+  <div class="wrap">
+    <div class="section-head"><span class="section-num">01</span><h2 class="section-title">The problem</h2></div>
+    <p class="lead">Every delivery app shows a countdown the moment you order. That number isn't guessed — it's predicted from patterns in thousands of past deliveries: how far the food has to travel, how bad traffic is right now, whether the rider is juggling other orders at the same time. This project builds that predictor from raw data, end to end, and explains exactly what's inside the number.</p>
+  </div>
+</section>
+
+<section id="data">
+  <div class="wrap">
+    <div class="section-head"><span class="section-num">02</span><h2 class="section-title">The data</h2></div>
+    <p class="lead">45,584 real Zomato delivery records — rider details, restaurant &amp; drop-off coordinates, weather, traffic, and the actual time each delivery took.</p>
+    <div class="stat-strip">
+      <div class="stat"><div class="num">45,584</div><div class="lbl">raw orders</div></div>
+      <div class="stat"><div class="num">40,188</div><div class="lbl">after cleaning</div></div>
+      <div class="stat"><div class="num">3,640</div><div class="lbl">corrupted GPS rows removed</div></div>
+      <div class="stat"><div class="num">8</div><div class="lbl">columns with missing data, handled</div></div>
+    </div>
+    <p class="lead" style="margin-bottom:0;">A distance feature didn't exist in the raw data — it was derived from raw lat/long coordinates using the <strong style="color:var(--text)">Haversine formula</strong>, which accounts for Earth's curvature rather than treating GPS points as flat x/y coordinates.</p>
+  </div>
+</section>
+
+<section id="eda">
+  <div class="wrap">
+    <div class="section-head"><span class="section-num">03</span><h2 class="section-title">What actually drives delivery time</h2></div>
+    <p class="lead">The intuitive assumption — "distance matters most" — turned out to be wrong. Here's what the data actually showed, ranked weakest to strongest.</p>
+    <div class="insight-grid">
+      <div class="insight-card">
+        <span class="strength weak">Weak · r = 0.32</span>
+        <h4>Distance</h4>
+        <p>Barely correlated on its own — a 2km and a 20km order showed nearly the same range of delivery times.</p>
+        <div class="bar-track"><div class="bar-fill" style="width:32%; background:var(--muted-dim);"></div></div>
+      </div>
+      <div class="insight-card">
+        <span class="strength mod">Moderate</span>
+        <h4>Weather</h4>
+        <p>Sunny days were clearly fastest (median 20 min); Fog and Cloudy days ran slowest (median 29 min).</p>
+        <div class="bar-track"><div class="bar-fill" style="width:55%; background:var(--teal);"></div></div>
+      </div>
+      <div class="insight-card">
+        <span class="strength mod">Moderate–Strong</span>
+        <h4>Traffic density</h4>
+        <p>Clean step-up pattern: Low → Medium → High → Jam each added visible extra minutes.</p>
+        <div class="bar-track"><div class="bar-fill" style="width:68%; background:var(--teal);"></div></div>
+      </div>
+      <div class="insight-card">
+        <span class="strength strong">Strong</span>
+        <h4>Festival days</h4>
+        <p>Nearly 2× slower — median jumped from ~25 min to ~45 min on festival days.</p>
+        <div class="bar-track"><div class="bar-fill" style="width:88%; background:var(--amber);"></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="math">
+  <div class="wrap">
+    <div class="section-head"><span class="section-num">04</span><h2 class="section-title">The math behind the number above</h2></div>
+    <p class="lead">The live prediction at the top of this page is not a lookup — it's this exact equation, computed in your browser from the sliders you moved. No server, no API call.</p>
+    <div class="equation-box" id="equationBox">ETA&nbsp;=&nbsp;9.94&nbsp;<span class="op">+</span>&nbsp;0.35·distance_km&nbsp;<span class="op">+</span>&nbsp;2.36·traffic&nbsp;<span class="op">+</span>&nbsp;3.30·multiple_deliveries&nbsp;<span class="op">+</span>&nbsp;10.10·festival&nbsp;<span class="op">+</span>&nbsp;weather_term&nbsp;<span class="op">+</span>&nbsp;city_term&nbsp;<span class="op">+</span>&nbsp;vehicle_term</div>
+    <p class="lead">Each coefficient is a weight the model learned directly from the 40,188 cleaned deliveries — for example, every extra kilometer adds about <strong style="color:var(--text)">0.35 minutes</strong>, holding everything else constant, while a festival day alone adds about <strong style="color:var(--text)">10 minutes</strong>. Categorical fields like weather and city are one-hot encoded, so only one of their terms is ever "switched on" at a time.</p>
+  </div>
+</section>
+
+<section id="models">
+  <div class="wrap">
+    <div class="section-head"><span class="section-num">05</span><h2 class="section-title">Linear regression vs. random forest</h2></div>
+    <p class="lead">Two models were trained on identical data. The simpler one is deployed above because it's fully explainable — every prediction can be traced back to a visible equation, term by term.</p>
+    <table class="cmp">
+      <thead><tr><th>Model</th><th>MAE</th><th>RMSE</th><th>R²</th></tr></thead>
+      <tbody>
+        <tr class="deployed"><td>Linear Regression <span class="pill-deployed">deployed above</span></td><td class="metric">5.17 min</td><td class="metric">6.48</td><td class="metric">0.530</td></tr>
+        <tr><td>Random Forest (100 trees)</td><td class="metric">3.42 min</td><td class="metric">4.27</td><td class="metric">0.795</td></tr>
+      </tbody>
+    </table>
+    <p class="lead" style="margin-top:20px;">The Random Forest explains meaningfully more variance (0.795 vs 0.530) because it can capture non-linear interactions — like traffic and festival compounding each other — that a straight-line model can't. It's documented in the notebook as the stronger model, and it's the next planned upgrade for this live demo once its internals are properly understood rather than dropped in as a black box.</p>
+  </div>
+</section>
+
+<section id="notes">
+  <div class="wrap">
+    <div class="section-head"><span class="section-num">06</span><h2 class="section-title">Honest notes</h2></div>
+    <p class="lead">Two things the model surfaced that deserved scrutiny rather than acceptance at face value.</p>
+    <div class="note-card">
+      <span class="tag">Investigated: possible data leakage</span>
+      Delivery person rating came out as the single most important feature in the Random Forest — more than distance or traffic. Since ratings can be influenced by delivery speed itself, this was tested by retraining without it. Performance dropped only modestly (R² 0.828 → 0.795), suggesting it reflects genuine rider experience more than circular leakage — but it's flagged, and excluded from the deployed model as the safer call.
+    </div>
+    <div class="note-card">
+      <span class="tag">Small-sample coefficient</span>
+      The "Semi-Urban" city coefficient came out unusually large (+10.6 minutes) — larger than the festival effect. That category makes up only 141 of 40,188 rows (0.35%), so this number is likely noise from a small sample rather than a reliable real-world effect, and should be read with caution.
+    </div>
+  </div>
+</section>
+
+<section id="learned">
+  <div class="wrap">
+    <div class="section-head"><span class="section-num">07</span><h2 class="section-title">What I learned</h2></div>
+    <div class="reflect">
+      <p>Going in, I assumed distance would obviously be the biggest factor in delivery time — it turned out to be one of the weakest. Operational chaos (festival demand spikes, riders juggling multiple orders at once) mattered far more than geography, which wasn't obvious until I actually plotted it.</p>
+      <p>The most useful habit I picked up wasn't a modeling technique — it was learning to be suspicious of a suspiciously strong feature. When rating came out on top of the feature importance list, the right move was to test it, not celebrate it.</p>
+      <p><em>— edit this section with your own reflections before publishing.</em></p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="footer-row">
+      <div class="footer-links">
+        <a href="#" id="githubLink">GitHub repo</a>
+        <a href="#" id="linkedinLink">LinkedIn</a>
+        <a href="https://www.kaggle.com/datasets/saurabhbadole/zomato-delivery-operations-analytics-dataset" target="_blank" rel="noopener">Dataset source</a>
+      </div>
+      <div class="footer-note">Analysis, cleaning, feature engineering, and both models built and evaluated by hand. This page's design and code were built with AI assistance.</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const model = {
+    intercept: 9.935264082525219,
+    coefficients: {
+      "Delivery_person_Age": 0.4259389173611889,
+      "Road_traffic_density": 2.35865815803285,
+      "Vehicle_condition": -2.310932034028886,
+      "multiple_deliveries": 3.302900286977762,
+      "Festival": 10.097761997766673,
+      "distance_km": 0.3536751245391965,
+      "Weather_conditions_Fog": 0.04288238477610269,
+      "Weather_conditions_Sandstorms": -2.504258275684213,
+      "Weather_conditions_Stormy": -2.507369930997027,
+      "Weather_conditions_Sunny": -6.208659231962625,
+      "Weather_conditions_Windy": -2.364885695120909,
+      "Type_of_order_Drinks": 0.06306422544322454,
+      "Type_of_order_Meal": 0.20499467489015277,
+      "Type_of_order_Snack": 0.12355775048786723,
+      "Type_of_vehicle_motorcycle": -0.5097231129569529,
+      "Type_of_vehicle_scooter": -0.9561971782460752,
+      "City_Semi-Urban": 10.648719528743914,
+      "City_Unknown": -2.660147549395882,
+      "City_Urban": -2.242074626515623
+    }
+  };
+
+  const AVG_AGE = 29.5;       // dataset-average rider age, used as a fixed assumption for the demo
+  const AVG_VEHICLE_COND = 1; // typical vehicle condition score in the dataset
+  const AVG_ORDER = "Meal";   // fixed assumption for order type in the demo
+
+  const distanceEl = document.getElementById('distance');
+  const multiEl = document.getElementById('multi');
+  const trafficEl = document.getElementById('traffic');
+  const weatherEl = document.getElementById('weather');
+  const cityEl = document.getElementById('city');
+  const vehicleEl = document.getElementById('vehicle');
+  const distVal = document.getElementById('distVal');
+  const mdVal = document.getElementById('mdVal');
+  const etaBig = document.getElementById('etaBig');
+  const wbRows = document.getElementById('wbRows');
+  const wbTotal = document.getElementById('wbTotal');
+  const routeActive = document.getElementById('routeActive');
+  const courier = document.getElementById('courier');
+  const statusPill = document.getElementById('statusPill');
+
+  let festival = 0;
+  document.querySelectorAll('.toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      festival = parseInt(btn.dataset.fest);
+      compute();
+    });
+  });
+
+  function computeBreakdown() {
+    const distance = parseFloat(distanceEl.value);
+    const multi = parseInt(multiEl.value);
+    const traffic = parseInt(trafficEl.value);
+    const weather = weatherEl.value;
+    const city = cityEl.value;
+    const vehicle = vehicleEl.value;
+    const c = model.coefficients;
+
+    const rows = [];
+    rows.push(['distance', distance * c['distance_km'], `${distance} km × 0.35`]);
+    rows.push(['traffic', traffic * c['Road_traffic_density'], `level ${traffic} × 2.36`]);
+    rows.push(['simultaneous orders', multi * c['multiple_deliveries'], `${multi} × 3.30`]);
+    if (festival) rows.push(['festival day', c['Festival'], 'flat surcharge']);
+    if (weather !== 'Cloudy') rows.push(['weather: ' + weather, c['Weather_conditions_' + weather], 'category effect']);
+    if (city !== 'Metropolitian') rows.push(['city: ' + city, c['City_' + city], 'category effect']);
+    if (vehicle !== 'bicycle') rows.push(['vehicle: ' + vehicle, c['Type_of_vehicle_' + vehicle], 'category effect']);
+    rows.push(['rider age (avg. assumed)', AVG_AGE * c['Delivery_person_Age'], 'fixed assumption']);
+    rows.push(['vehicle condition (avg.)', AVG_VEHICLE_COND * c['Vehicle_condition'], 'fixed assumption']);
+    rows.push(['order type (assumed: meal)', c['Type_of_order_Meal'], 'fixed assumption']);
+
+    let total = model.intercept;
+    rows.forEach(r => total += r[1]);
+    return { rows, total };
+  }
+
+  function compute() {
+    distVal.textContent = parseFloat(distanceEl.value).toFixed(1) + ' km';
+    mdVal.textContent = multiEl.value;
+
+    const { rows, total } = computeBreakdown();
+    const eta = Math.max(total, 5);
+
+    etaBig.textContent = eta.toFixed(1);
+    wbTotal.textContent = eta.toFixed(1) + ' min';
+
+    wbRows.innerHTML = rows.map(r => {
+      const sign = r[1] >= 0 ? 'pos' : '';
+      return `<div class="wb-row"><span class="k">${r[0]}</span><span class="v ${sign}">${r[1].toFixed(2)}</span></div>`;
+    }).join('');
+
+    // animate route speed relative to ETA (clamped for a pleasant demo pace)
+    const duration = Math.min(Math.max(eta / 3, 4), 13);
+    courier.style.animationDuration = duration + 's';
+
+    // status pill color by traffic
+    const traffic = parseInt(trafficEl.value);
+    if (traffic >= 3) { statusPill.style.color = '#e5484d'; statusPill.style.borderColor='rgba(229,72,77,0.4)'; statusPill.style.background='rgba(229,72,77,0.1)'; statusPill.textContent='● heavy traffic'; }
+    else if (traffic === 2) { statusPill.style.color = '#ffb020'; statusPill.style.borderColor='rgba(255,176,32,0.4)'; statusPill.style.background='rgba(255,176,32,0.1)'; statusPill.textContent='● slowed'; }
+    else { statusPill.style.color = '#33c6a0'; statusPill.style.borderColor='rgba(51,198,160,0.3)'; statusPill.style.background='rgba(51,198,160,0.12)'; statusPill.textContent='● en route'; }
+  }
+
+  [distanceEl, multiEl, trafficEl, weatherEl, cityEl, vehicleEl].forEach(el => {
+    el.addEventListener('input', compute);
+  });
+
+  // ---- route path motion (courier dot glides along the SVG path) ----
+  const pathEl = routeActive;
+  const pathLength = pathEl.getTotalLength();
+  pathEl.style.strokeDasharray = pathLength;
+  pathEl.style.strokeDashoffset = pathLength;
+
+  let animStart = null;
+  let currentDuration = 8000;
+  function animate(ts) {
+    if (!animStart) animStart = ts;
+    const elapsed = (ts - animStart) % currentDuration;
+    const progress = elapsed / currentDuration;
+    const point = pathEl.getPointAtLength(progress * pathLength);
+    courier.setAttribute('cx', point.x);
+    courier.setAttribute('cy', point.y);
+    pathEl.style.strokeDashoffset = pathLength * (1 - progress);
+    requestAnimationFrame(animate);
+  }
+  // duration control via a plain variable (kept simple, no CSS keyframes needed for the path draw)
+  function refreshDuration() {
+    const { total } = computeBreakdown();
+    const eta = Math.max(total, 5);
+    currentDuration = Math.min(Math.max(eta * 250, 4000), 13000);
+  }
+  [distanceEl, multiEl, trafficEl, weatherEl, cityEl, vehicleEl].forEach(el => el.addEventListener('input', refreshDuration));
+  document.querySelectorAll('.toggle-btn').forEach(btn => btn.addEventListener('click', refreshDuration));
+
+  refreshDuration();
+  requestAnimationFrame(animate);
+  compute();
+</script>
+
+</body>
+</html>

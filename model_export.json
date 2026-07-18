@@ -1,0 +1,24 @@
+{
+  "intercept": 9.935264082525219,
+  "coefficients": {
+    "Delivery_person_Age": 0.4259389173611889,
+    "Road_traffic_density": 2.35865815803285,
+    "Vehicle_condition": -2.310932034028886,
+    "multiple_deliveries": 3.302900286977762,
+    "Festival": 10.097761997766673,
+    "distance_km": 0.3536751245391965,
+    "Weather_conditions_Fog": 0.04288238477610269,
+    "Weather_conditions_Sandstorms": -2.504258275684213,
+    "Weather_conditions_Stormy": -2.507369930997027,
+    "Weather_conditions_Sunny": -6.208659231962625,
+    "Weather_conditions_Windy": -2.364885695120909,
+    "Type_of_order_Drinks": 0.06306422544322454,
+    "Type_of_order_Meal": 0.20499467489015277,
+    "Type_of_order_Snack": 0.12355775048786723,
+    "Type_of_vehicle_motorcycle": -0.5097231129569529,
+    "Type_of_vehicle_scooter": -0.9561971782460752,
+    "City_Semi-Urban": 10.648719528743914,
+    "City_Unknown": -2.660147549395882,
+    "City_Urban": -2.242074626515623
+  }
+}
